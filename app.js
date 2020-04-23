@@ -1,242 +1,98 @@
-
-var ejs = require('ejs').__express;
-
-var fs = require('fs');
-
-
-
-// May want to add cluster processes later to handle some multi-threading properties
-
-//AWS required functions 
-
-var AWS = require('aws-sdk');
-
-var express = require('express');
-
-var bodyParser = require('body-parser');
-
-
-
-
-
-AWS.config.region = process.env.region;
-
-
-
-//setting up the AWS Dynamo DB and AWS Simple Notification System
-
-var sns = new AWS.SNS();
-
-var ddb = new AWS.DynamoDB();
-
-
-
-var ddbTable = process.env.PASSWORD_TABLE;
-
-var snsTopic = process.env.NEW_PASSWORD_TOPIC;
-
-var app = express();
-
-
-
-
-
-//Create application/x-www-forn-urlencoded parser
-
-var urlencodedParser = bodyParser.urlencoded({extended: false})
-
-
-
-app.set('views', __dirname + '/views');
-
-app.set('view engine', 'ejs');
-
-app.engine('.ejs', ejs);
-
-app.use(express.static(__dirname + '/public'));
-
-
-
-//render new ejs file
-
-app.get('/', (req, res) => {
-
-	res.render('index.ejs');
-
-})
-
-
-
-
-
-app.post('/process_post', urlencodedParser, (req,res) => {
-
-	//Prepare output in JSON format
-
-	var post = {
-
-		'Domain':{'S' : req.body.Domain},
-
-		'Password':{ 'S' : req.body.Password}
-
-	};
-
-// May not need this to insert data
-
-	// console.log(response);
-
-	
-
-	// // write/update response in the "database"
-
-	// var data = JSON.stringify(response);
-
-
-
-	// fs.writeFileSync(__dirname + "/private/passwords/" + req.body.Domain + ".json", data);
-
-
-
-	// res.end("Domain and password recieved by server");
-
-//For correctly putting the user input Domain and Password into the DB, checks for blamk space and incorrect input
-
-// While posting a completion message if it was a success
-
-
-
-	ddb.putItem({
-
-	'TableName' : ddbTable,
-
-	'Item' : post,
-
-	'Expected': { Domain: { Exists: false } }        
-
+// Include the cluster module
+var cluster = require('cluster');
+
+// Code to run if we're in the master process
+if (cluster.isMaster) {
+
+    // Count the machine's CPUs
+    var cpuCount = require('os').cpus().length;
+
+    // Create a worker for each CPU
+    for (var i = 0; i < cpuCount; i += 1) {
+        cluster.fork();
+    }
+
+    // Listen for terminating workers
+    cluster.on('exit', function (worker) {
+
+        // Replace the terminated workers
+        console.log('Worker ' + worker.id + ' died :(');
+        cluster.fork();
+
+    });
+
+// Code to run if we're in a worker process
+} else {
+    var AWS = require('aws-sdk');
+    var express = require('express');
+    var bodyParser = require('body-parser');
+
+    AWS.config.region = process.env.REGION
+
+    var sns = new AWS.SNS();
+    var ddb = new AWS.DynamoDB();
+
+    var ddbTable =  process.env.STARTUP_SIGNUP_TABLE;
+    var snsTopic =  process.env.NEW_SIGNUP_TOPIC;
+    var app = express();
+
+    app.set('view engine', 'ejs');
+    app.set('views', __dirname + '/views');
+    app.use(bodyParser.urlencoded({extended:false}));
+
+    app.get('/', function(req, res) {
+        res.render('index', {
+            static_path: 'static',
+            theme: process.env.THEME || 'flatly',
+            flask_debug: process.env.FLASK_DEBUG || 'false'
+        });
+    });
+
+    app.post('/signup', function(req, res) {
+        var item = {
+            'email': {'S': req.body.email},
+            'domain': {'S': req.body.domain},
+            'password': {'S': req.body.password},
+            'theme': {'S': req.body.theme}
+        };
+
+        ddb.putItem({
+            'TableName': ddbTable,
+            'Item': item,
+            'Expected': { email: { Exists: false } }        
         }, function(err, data) {
-
             if (err) {
-
                 var returnStatus = 500;
 
-
-
                 if (err.code === 'ConditionalCheckFailedException') {
-
                     returnStatus = 409;
-
                 }
 
-
-
                 res.status(returnStatus).end();
-
                 console.log('DDB Error: ' + err);
-
             } else {
-
-            	sns.publish({
-
-            		'Message': 'Domain:' + req.body.Domain + "\r\nPassword: " + req.body.Password,
-
-            		'Subject': 'New Password added!!!',
-
-            		'TopicArn': snsTopic
-
-            	}, function(err, data) {
-
+                sns.publish({
+                    'Message': 'Email: ' + req.body.email + "\r\nDomain: " + req.body.domain 
+                                        + "\r\nPassword: " + req.body.password 
+                                        + "\r\nTheme: " + req.body.theme,
+                    'Subject': 'New user sign up!!!',
+                    'TopicArn': snsTopic
+                }, function(err, data) {
                     if (err) {
-
                         res.status(500).end();
-
                         console.log('SNS Error: ' + err);
-
                     } else {
-
                         res.status(201).end();
-
                     }
-
                 });            
-
             }
+        });
+    });
+   
 
-})
+    var port = process.env.PORT || 3000;
 
-})
-
-
-
-
-
-ddb.getItem(post, (err, data) {
-
-	if (err) {
-
-		console.log("password not found in the table" , err);
-
-	} else {
-
-		sns.publish({
-
-			'Message': 'Domain:' + req.body.Domain + "\r\nPassword: " + req.body.Password,
-
-            'Subject': 'password retrieved for' + req.body.Domain,
-
-            'TopicArn': snsTopic
-
-		})
-
-});
-
-
-
-// app.get('/process_get', (req,res) => {
-
-// 	//want to search in the "database" for correct value
-
-// 	fs.readdir(__dirname + "/private/passwords/", (err, files) => {
-
-// 		files.forEach(file => {
-
-// 			if (file === (req.query.Domain + ".json"))
-
-// 			{
-
-// 				var rawdata = fs.readFileSync(__dirname + "/private/passwords/" + file);
-
-// 				var domainPasswordObject = JSON.parse(rawdata);
-
-// 				console.log(domainPasswordObject);
-
-
-
-// 				res.end(JSON.stringify(domainPasswordObject));
-
-// 			}
-
-// 		})
-
-// 		// if password not found, return this message
-
-// 		res.end("Password not found for specified domain");
-
-// 		}
-
-// 	)
-
-// })
-
-
-
-var server = app.listen(9001, () => {
-
-	var host = server.address().address
-
-	var port = server.address().port
-
-
-
-	console.log("Application is listening at http://%s:%s", host, port)
-
-})
+    var server = app.listen(port, function () {
+        console.log('Server running at http://127.0.0.1:' + port + '/');
+    });
+}

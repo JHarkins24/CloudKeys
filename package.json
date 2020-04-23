@@ -1,19 +1,14 @@
 {
-  "name": "cloudKeys",
-  "version": "1.0.0",
-  "description": "a completely cloud based password manager",
-  "main": "app.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "Tyler Yere",
-  "license": "ISC",
-  "devDependencies": {
-    "nodemon": "^2.0.2"
-  },
+  "name": "Elastic-Beanstalk-Sample-App",
+  "version": "0.0.1",
+  "private": true,
   "dependencies": {
-    "ejs": "^3.0.1",
-    "express": "^4.17.1",
-    "jquery": "^3.4.1"
+    "ejs": "latest",
+    "aws-sdk": "latest",
+    "express": "latest",
+    "body-parser": "latest"
+  },
+  "scripts": {
+    "start": "node app.js"
   }
 }
