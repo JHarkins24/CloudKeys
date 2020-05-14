@@ -1,0 +1,20 @@
+{
+  "name": "cloudKeys",
+  "version": "1.0.0",
+  "description": "a completely cloud based password manager",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "author": "Tyler Yere",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-crypto/client-browser": "latest",
+    "@aws-crypto/client-node": "latest",
+    "aws-sdk": "latest",
+    "ejs": "latest",
+    "express": "latest",
+    "jquery": "latest",
+    "json-loader": "latest"
+  }
+}
